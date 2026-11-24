@@ -14,7 +14,7 @@ const getAllTasks = async (req, res) => {
 //get task by id
 const getTaskById = async (req, res) => {
     try {
-        const id = req.params.id; // Express magic! ID eka kelinma gannawa
+        const id = req.params.id; 
         
         const task = await db.query("SELECT * FROM tasks WHERE id = $1", [id]);
         
@@ -25,6 +25,33 @@ const getTaskById = async (req, res) => {
         }
     } catch (error) {
         res.status(500).json({ message: "Server error" });
+    }
+};
+
+const getPublicTasks = async (req, res) => {
+    try {
+        const userId = req.user.id; 
+
+        const result = await db.query(
+            `SELECT tasks.id, tasks.title, tasks.description, tasks.status, tasks.is_private, tasks.user_id, users.username, tasks.created_at
+             FROM tasks
+             JOIN users ON tasks.user_id = users.id
+             WHERE tasks.is_private = false AND tasks.user_id != $1
+             ORDER BY tasks.created_at DESC`,
+            [userId]
+        );
+
+        res.status(200).json({
+            tasks: result.rows
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            error: {
+                code: "INTERNAL_SERVER_ERROR",
+                message: "Server error"
+            }
+        });
     }
 };
 
@@ -94,5 +121,6 @@ module.exports = {
     getTaskById,
     createTask,
     updateTask,
-    deleteTask
+    deleteTask,
+    getPublicTasks
 };

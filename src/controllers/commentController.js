@@ -7,7 +7,7 @@ const getTaskComments = async (req, res) => {
 
         
         const taskResult = await db.query(
-            "SELECT id, user_id, visibility FROM tasks WHERE id = $1",
+            "SELECT id, user_id, is_private FROM tasks WHERE id = $1",
             [taskId]
         );
 
@@ -23,7 +23,7 @@ const getTaskComments = async (req, res) => {
         const task = taskResult.rows[0];
 
         
-        if (task.visibility !== "public") {
+        if (task.is_private === true) {
             return res.status(403).json({
                 error: {
                     code: "FORBIDDEN",
@@ -34,13 +34,13 @@ const getTaskComments = async (req, res) => {
 
         
         const commentsResult = await db.query(
-            `SELECT c.id, c.task_id, c.user_id, u.username, c.content, c.created_at
-             FROM comments c
-             JOIN users u ON c.user_id = u.id
-             WHERE c.task_id = $1
-             ORDER BY c.created_at DESC`,
+            `SELECT comments.id, comments.task_id, comments.user_id, users.username, comments.content, comments.created_at
+            FROM comments
+            JOIN users ON comments.user_id = users.id
+            WHERE comments.task_id = $1
+            ORDER BY comments.created_at DESC`,
             [taskId]
-        );
+);
 
        
         res.status(200).json({
@@ -77,7 +77,7 @@ const addComment = async (req, res) => {
 
         
         const taskResult = await db.query(
-            "SELECT id, user_id, visibility FROM tasks WHERE id = $1",
+            "SELECT id, user_id, is_private FROM tasks WHERE id = $1",
             [taskId]
         );
 
@@ -93,7 +93,7 @@ const addComment = async (req, res) => {
         const task = taskResult.rows[0];
 
        
-        if (task.visibility !== "public") {
+        if (task.is_private === true) {
             return res.status(403).json({
                 error: {
                     code: "FORBIDDEN",
