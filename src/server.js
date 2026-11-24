@@ -1,26 +1,24 @@
-const http = require("http");
-const taskController = require("./controllers/taskcontroller");
-const userController = require("./controllers/usercontroller");
+const express = require('express');
+const cors = require('cors');
+require('dotenv').config();
+const taskRoutes = require('./routes/taskRoutes');
+const userRoutes = require('./routes/userRoutes');
+const commentRoutes = require('./routes/commentRoutes');
 
-const server = http.createServer(async(req, res) => {
-    res.setHeader("Content-Type", "application/json");
-        
-    if(req.url.startsWith("/api/tasks"))
-    {
-        await taskController(req, res);
-    }
+const PORT = process.env.PORT || 3000;
 
-    else if (req.url.startsWith("/api/users"))
-    {
-        await userController(req, res);
-    }
-    else
-    {
-        res.writeHead(404);
-        res.end(JSON.stringify({message:"Route not found"}));
-    }
-});
 
-server.listen(3000, () => {
-    console.log("Server is running on port 3000");
+const main = express(); 
+
+
+
+main.use(cors());
+main.use(express.json());
+
+main.use("/api/tasks", taskRoutes);
+main.use("/api/users", userRoutes);
+
+
+main.listen(PORT, () => {
+    console.log('Server is running on ${PORT}!');
 });

@@ -1,112 +1,97 @@
-const db = require("../db-connection");
+const db = require("../config/db-connection");
 
-const handleTasks = async (req, res) => {
-//get
-if(req.url === "/api/tasks" && req.method === "GET")
-{
-    const tasks = await db.query("SELECT * FROM tasks");
-    res.writeHead(200);
-    res.end(JSON.stringify(tasks.rows));
 
-}
-
-// get task by id
-else if(req.url.startsWith("/api/tasks/") && req.method === "GET")
-    {
-    const id = req.url.split("/")[3];
-
-    const task = await db.query("SELECT * FROM tasks WHERE id = $1", [id]);
-    if(task.rows.length > 0)
-    {
-        res.writeHead(200);
-        res.end(JSON.stringify(task.rows[0]));
+//getalltasks
+const getAllTasks = async (req, res) => {
+    try {
+        const tasks = await db.query("SELECT * FROM tasks");
+        res.status(200).json(tasks.rows);
+    } catch (error) {
+        res.status(500).json({ message: "Server error" });
     }
-    else
-    {
-        res.writeHead(404);
-        res.end(JSON.stringify({message:"Task not found"}));
+};
+
+//get task by id
+const getTaskById = async (req, res) => {
+    try {
+        const id = req.params.id; // Express magic! ID eka kelinma gannawa
+        
+        const task = await db.query("SELECT * FROM tasks WHERE id = $1", [id]);
+        
+        if (task.rows.length > 0) {
+            res.status(200).json(task.rows[0]);
+        } else {
+            res.status(404).json({ message: "Task not found" });
+        }
+    } catch (error) {
+        res.status(500).json({ message: "Server error" });
     }
-}
+};
 
-//post
-else if (req.url === "/api/tasks" && req.method === "POST")
-{
-    let body = "";
-    req.on("data", (chunk) => {
-        body += chunk.toString();
-    });
+//post task
+const createTask = async (req, res) => {
+    try {
+        const { title, description, status = "pending",is_private } = req.body; 
 
-    req.on("end", async () => {
-        const newTask = JSON.parse(body);
-        const status = newTask.status || "pending";
-
-        const result = await db.query("INSERT INTO tasks (title, description, status) VALUES ($1, $2, $3) RETURNING *", 
-            [newTask.title, newTask.description, status]
+        const result = await db.query(
+            "INSERT INTO tasks (title, description, status,is_private) VALUES ($1, $2, $3 $4) RETURNING *", 
+            [title, description, status,is_private]
         );
 
-        res.writeHead(201);
-        res.end(JSON.stringify({message:"Task created successfully", taskId: result.rows[0].id}));
-    });
-}
+        res.status(201).json({ message: "Task created successfully", taskId: result.rows[0].id });
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server error",error:error });
+    }
+};
 
-//patch
-else if (req.url.startsWith("/api/tasks/") && req.method === "PATCH")
-{   
-    const id = req.url.split("/")[3];
-    let body = "";
-    req.on("data", (chunk) => {
-        body += chunk.toString();
-    });
 
-    req.on("end", async () => {
-        const updateData = JSON.parse(body);
+//patch task details
+const updateTask = async (req, res) => {
+    try {
+        const id = req.params.id;
+        const updateData = req.body;
+
         const existingTask = await db.query("SELECT * FROM tasks WHERE id = $1", [id]);
 
-        if(existingTask.rows.length > 0)
-        {
+        if (existingTask.rows.length > 0) {
             const currentTask = existingTask.rows[0];
             const updatedTask = {
                 title: updateData.title || currentTask.title,
                 description: updateData.description || currentTask.description,
                 status: updateData.status || currentTask.status
-                };
+            };
 
-                await db.query(
-                    "UPDATE tasks SET title = $1, description = $2, status = $3 WHERE id = $4",
-                    [updatedTask.title, updatedTask.description, updatedTask.status, id]);
+            await db.query(
+                "UPDATE tasks SET title = $1, description = $2, status = $3 WHERE id = $4",
+                [updatedTask.title, updatedTask.description, updatedTask.status, id]
+            );
 
-                res.writeHead(200);
-                res.end(JSON.stringify({message:"Task updated successfully"}));
+            res.status(200).json({ message: "Task updated successfully" });
+        } else {
+            res.status(404).json({ message: "Task not found" });
         }
-        else
-        {
-            res.writeHead(404);
-            res.end(JSON.stringify({message:"Task not found"}));
-        }
-    });
-}
-
-//delete
-else if (req.url.startsWith("/api/tasks/") && req.method === "DELETE")
-{
-    const id = req.url.split("/")[3];
-    const task = await db.query("DELETE FROM tasks WHERE id = $1", [id]);
-
-    res.writeHead(200);
-    res.end(JSON.stringify({message:"Task deleted successfully"}))
-
-}
-else
-{
-    res.writeHead(404);
-    res.end(JSON.stringify({message:"Route not found"}));
-
-}
+    } catch (error) {
+        res.status(500).json({ message: "Server error" });
+    }
 };
 
-module.exports = handleTasks;
+//delete  task
+const deleteTask = async (req, res) => {
+    try {
+        const id = req.params.id;
+        await db.query("DELETE FROM tasks WHERE id = $1", [id]);
+        
+        res.status(200).json({ message: "Task deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ message: "Server error" });
+    }
+};
 
-
-
-
-
+module.exports = {
+    getAllTasks,
+    getTaskById,
+    createTask,
+    updateTask,
+    deleteTask
+};
