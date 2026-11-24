@@ -87,8 +87,38 @@ const loginUser =  async (req  , res) => {
     }
 };
 
+const getCurrentUser = async (req, res) => {
+    try {
+        const result = await db.query(
+            "SELECT id, username, created_at FROM users WHERE id = $1",
+            [req.user.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                error: {
+                    code: "NOT_FOUND",
+                    message: "User not found"
+                }
+            });
+        }
+
+        res.status(200).json(result.rows[0]);
+        
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            error: {
+                code: "INTERNAL_SERVER_ERROR",
+                message: "Server error"
+            }
+        });
+    }
+};
+
 module.exports = {
     registerUser,
-    loginUser
+    loginUser,
+    getCurrentUser
 
 };

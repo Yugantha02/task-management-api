@@ -16,7 +16,8 @@ main.use(cors());
 main.use(express.json());
 
 main.use("/api/tasks", taskRoutes);
-main.use("/api/users", userRoutes);
+main.use("/api/auth", userRoutes);
+main.use("/api/tasks",commentRoutes);
 
 
 main.listen(PORT, () => {

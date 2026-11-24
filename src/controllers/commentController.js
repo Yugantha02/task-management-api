@@ -1,0 +1,149 @@
+const db = require("../config/db-connection");
+
+
+const getTaskComments = async (req, res) => {
+    try {
+        const taskId = req.params.id;
+
+        
+        const taskResult = await db.query(
+            "SELECT id, user_id, visibility FROM tasks WHERE id = $1",
+            [taskId]
+        );
+
+        if (taskResult.rows.length === 0) {
+            return res.status(404).json({
+                error: {
+                    code: "NOT_FOUND",
+                    message: "Task not found"
+                }
+            });
+        }
+
+        const task = taskResult.rows[0];
+
+        
+        if (task.visibility !== "public") {
+            return res.status(403).json({
+                error: {
+                    code: "FORBIDDEN",
+                    message: "Comments are not available for private tasks"
+                }
+            });
+        }
+
+        
+        const commentsResult = await db.query(
+            `SELECT c.id, c.task_id, c.user_id, u.username, c.content, c.created_at
+             FROM comments c
+             JOIN users u ON c.user_id = u.id
+             WHERE c.task_id = $1
+             ORDER BY c.created_at DESC`,
+            [taskId]
+        );
+
+       
+        res.status(200).json({
+            comments: commentsResult.rows
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            error: {
+                code: "INTERNAL_SERVER_ERROR",
+                message: "Server error"
+            }
+        });
+    }
+};
+
+
+const addComment = async (req, res) => {
+    try {
+        const taskId = req.params.id;
+        const userId = req.user.id; // authMiddleware eken ena user ID eka
+        const content = req.body.content?.trim();
+
+        // Validation: content eka empty wenna ba
+        if (!content) {
+            return res.status(400).json({
+                error: {
+                    code: "VALIDATION_ERROR",
+                    message: "Comment content is required",
+                    details: { field: "content" }
+                }
+            });
+        }
+
+        
+        const taskResult = await db.query(
+            "SELECT id, user_id, visibility FROM tasks WHERE id = $1",
+            [taskId]
+        );
+
+        if (taskResult.rows.length === 0) {
+            return res.status(404).json({
+                error: {
+                    code: "NOT_FOUND",
+                    message: "Task not found"
+                }
+            });
+        }
+
+        const task = taskResult.rows[0];
+
+       
+        if (task.visibility !== "public") {
+            return res.status(403).json({
+                error: {
+                    code: "FORBIDDEN",
+                    message: "Comments are not supported on private tasks"
+                }
+            });
+        }
+
+        if (task.user_id === userId) {
+            return res.status(403).json({
+                error: {
+                    code: "FORBIDDEN",
+                    message: "Task owner cannot comment on their own task"
+                }
+            });
+        }
+
+        const insertResult = await db.query(
+            "INSERT INTO comments (task_id, user_id, content) VALUES ($1, $2, $3) RETURNING id, task_id, user_id, content, created_at",
+            [taskId, userId, content]
+        );
+
+        const newComment = insertResult.rows[0];
+
+        const userResult = await db.query(
+            "SELECT username FROM users WHERE id = $1",
+            [userId]
+        );
+
+      
+        res.status(201).json({
+            id: newComment.id,
+            task_id: newComment.task_id,
+            user_id: newComment.user_id,
+            username: userResult.rows[0].username,
+            content: newComment.content,
+            created_at: newComment.created_at
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            error: {
+                code: "INTERNAL_SERVER_ERROR",
+                message: "Server error"
+            }
+        });
+    }
+};
+
+module.exports = {
+    getTaskComments,
+    addComment
+};
