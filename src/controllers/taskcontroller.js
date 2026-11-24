@@ -4,12 +4,31 @@ const db = require("../config/db-connection");
 //getalltasks
 const getAllTasks = async (req, res) => {
     try {
-        const tasks = await db.query("SELECT * FROM tasks");
-        res.status(200).json(tasks.rows);
+        const userId = req.user.id;
+
+        const result = await db.query(
+            `SELECT id, title, description, status, is_private, user_id, created_at
+             FROM tasks
+             WHERE user_id = $1
+             ORDER BY created_at DESC`,
+            [userId]
+        );
+
+        res.status(200).json({
+            tasks: result.rows
+        });
     } catch (error) {
-        res.status(500).json({ message: "Server error" });
+        console.error(error);
+        res.status(500).json({
+            error: {
+                code: "INTERNAL_SERVER_ERROR",
+                message: "Server error"
+            }
+        });
     }
 };
+
+
 
 //get task by id
 const getTaskById = async (req, res) => {

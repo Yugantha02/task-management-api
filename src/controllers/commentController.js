@@ -61,10 +61,10 @@ const getTaskComments = async (req, res) => {
 const addComment = async (req, res) => {
     try {
         const taskId = req.params.id;
-        const userId = req.user.id; // authMiddleware eken ena user ID eka
+        const userId = req.user.id;
         const content = req.body.content?.trim();
 
-        // Validation: content eka empty wenna ba
+       
         if (!content) {
             return res.status(400).json({
                 error: {
@@ -104,10 +104,10 @@ const addComment = async (req, res) => {
 
         if (task.user_id === userId) {
             return res.status(403).json({
-                error: {
+              error: {
                     code: "FORBIDDEN",
                     message: "Task owner cannot comment on their own task"
-                }
+                }  
             });
         }
 
