@@ -1,16 +1,16 @@
 const db = require("../config/db-connection");
 
-
 //getalltasks
 const getAllTasks = async (req, res) => {
     try {
         const userId = req.user.id;
 
         const result = await db.query(
-            `SELECT id, title, description, status, is_private, user_id, created_at
+            `SELECT tasks.id, tasks.title, tasks.description, tasks.status, tasks.is_private, tasks.created_at, users.username
              FROM tasks
-             WHERE user_id = $1
-             ORDER BY created_at DESC`,
+             JOIN users ON tasks.user_id = users.id
+             WHERE tasks.user_id = $1
+             ORDER BY tasks.created_at DESC`,
             [userId]
         );
 
@@ -49,15 +49,12 @@ const getTaskById = async (req, res) => {
 
 const getPublicTasks = async (req, res) => {
     try {
-        const userId = req.user.id; 
-
         const result = await db.query(
-            `SELECT tasks.id, tasks.title, tasks.description, tasks.status, tasks.is_private, tasks.user_id, users.username, tasks.created_at
+            `SELECT tasks.id, tasks.title, tasks.description, tasks.status, tasks.is_private, tasks.created_at, users.username
              FROM tasks
              JOIN users ON tasks.user_id = users.id
-             WHERE tasks.is_private = false AND tasks.user_id != $1
-             ORDER BY tasks.created_at DESC`,
-            [userId]
+             WHERE tasks.is_private = false
+             ORDER BY tasks.created_at DESC`
         );
 
         res.status(200).json({
@@ -73,7 +70,6 @@ const getPublicTasks = async (req, res) => {
         });
     }
 };
-
 //post task
 const createTask = async (req, res) => {
     try {
