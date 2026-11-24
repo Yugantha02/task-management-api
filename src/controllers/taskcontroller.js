@@ -31,11 +31,12 @@ const getTaskById = async (req, res) => {
 //post task
 const createTask = async (req, res) => {
     try {
-        const { title, description, status = "pending",is_private } = req.body; 
+        const { title, description, status = "pending", is_private = false } = req.body;
+        const userId = req.user.id; 
 
         const result = await db.query(
-            "INSERT INTO tasks (title, description, status,is_private) VALUES ($1, $2, $3 $4) RETURNING *", 
-            [title, description, status,is_private]
+            "INSERT INTO tasks (title, description, status, is_private, user_id) VALUES ($1, $2, $3, $4 ,$5) RETURNING *", 
+            [title, description, status,is_private, userId]
         );
 
         res.status(201).json({ message: "Task created successfully", taskId: result.rows[0].id });
