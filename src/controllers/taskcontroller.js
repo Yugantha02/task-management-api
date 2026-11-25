@@ -1,15 +1,16 @@
 const db = require("../config/db-connection");
 
-//getalltasks
+//getalltasks (own tasks + other users' public tasks)
 const getAllTasks = async (req, res) => {
     try {
         const userId = req.user.id;
 
         const result = await db.query(
-            `SELECT tasks.id, tasks.title, tasks.description, tasks.status, tasks.is_private, tasks.created_at, users.username
+            `SELECT tasks.id, tasks.title, tasks.description, tasks.status, tasks.is_private,
+                    tasks.user_id, tasks.created_at, users.username
              FROM tasks
              JOIN users ON tasks.user_id = users.id
-             WHERE tasks.user_id = $1
+             WHERE tasks.user_id = $1 OR tasks.is_private = false
              ORDER BY tasks.created_at DESC`,
             [userId]
         );
@@ -27,7 +28,6 @@ const getAllTasks = async (req, res) => {
         });
     }
 };
-
 
 //get task by id
 const getTaskById = async (req, res) => {
@@ -85,30 +85,6 @@ const getTaskById = async (req, res) => {
     }
 };
 
-const getPublicTasks = async (req, res) => {
-    try {
-        const result = await db.query(
-            `SELECT tasks.id, tasks.title, tasks.description, tasks.status, tasks.is_private, tasks.created_at, users.username
-             FROM tasks
-             JOIN users ON tasks.user_id = users.id
-             WHERE tasks.is_private = false
-             ORDER BY tasks.created_at DESC`
-        );
-
-        res.status(200).json({
-            tasks: result.rows
-        });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({
-            error: {
-                code: "INTERNAL_SERVER_ERROR",
-                message: "Server error"
-            }
-        });
-    }
-};
-
 //post task
 const createTask = async (req, res) => {
     try {
@@ -147,7 +123,6 @@ const createTask = async (req, res) => {
         });
     }
 };
-
 
 //patch task details
 const updateTask = async (req, res) => {
@@ -250,6 +225,5 @@ module.exports = {
     getTaskById,
     createTask,
     updateTask,
-    deleteTask,
-    getPublicTasks
+    deleteTask
 };

@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.use(authMiddleware);
 
-router.get('/public', taskController.getPublicTasks);
+//router.get('/public', taskController.getPublicTasks);
 router.get('/', taskController.getAllTasks);
 router.get('/:id', taskController.getTaskById);
 router.post('/', taskController.createTask);
