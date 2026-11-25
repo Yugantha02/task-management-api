@@ -1,63 +1,5 @@
 const db = require("../config/db-connection");
 
-
-const getTaskComments = async (req, res) => {
-    try {
-        const taskId = req.params.id;
-
-        
-        const taskResult = await db.query(
-            "SELECT id, user_id, is_private FROM tasks WHERE id = $1",
-            [taskId]
-        );
-
-        if (taskResult.rows.length === 0) {
-            return res.status(404).json({
-                error: {
-                    code: "NOT_FOUND",
-                    message: "Task not found"
-                }
-            });
-        }
-
-        const task = taskResult.rows[0];
-
-        
-        if (task.is_private === true) {
-            return res.status(403).json({
-                error: {
-                    code: "FORBIDDEN",
-                    message: "Comments are not available for private tasks"
-                }
-            });
-        }
-
-        
-        const commentsResult = await db.query(
-            `SELECT comments.id, users.username, comments.content AS text, comments.created_at
-             FROM comments
-             JOIN users ON comments.user_id = users.id
-             WHERE comments.task_id = $1
-             ORDER BY comments.created_at DESC`,
-            [taskId]
-        );
-
-       
-        res.status(200).json({
-            comments: commentsResult.rows
-        });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({
-            error: {
-                code: "INTERNAL_SERVER_ERROR",
-                message: "Server error"
-            }
-        });
-    }
-};
-
-
 const addComment = async (req, res) => {
     try {
         const taskId = req.params.id;
@@ -140,6 +82,5 @@ const addComment = async (req, res) => {
 };
 
 module.exports = {
-    getTaskComments,
     addComment
 };

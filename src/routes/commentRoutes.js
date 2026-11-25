@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.use(authMiddleware);
 
-router.get("/:id/comments", commentController.getTaskComments);
+//router.get("/:id/comments", commentController.getTaskComments);
 router.post("/:id/comments", commentController.addComment);
 
 

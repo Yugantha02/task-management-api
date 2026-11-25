@@ -1,13 +1,40 @@
 const db = require("../config/db-connection");
 
-//getalltasks (own tasks + other users' public tasks)
+//getalltasks (own tasks + other users' public tasks with comments)
 const getAllTasks = async (req, res) => {
     try {
         const userId = req.user.id;
 
         const result = await db.query(
-            `SELECT tasks.id, tasks.title, tasks.description, tasks.status, tasks.is_private,
-                    tasks.user_id, tasks.created_at, users.username
+            `SELECT
+                tasks.id,
+                tasks.title,
+                tasks.description,
+                tasks.status,
+                tasks.is_private,
+                tasks.user_id,
+                tasks.created_at,
+                users.username,
+                CASE
+                    WHEN tasks.is_private = true THEN '[]'::json
+                    ELSE COALESCE(
+                        (
+                            SELECT json_agg(
+                                json_build_object(
+                                    'id', c.id,
+                                    'username', cu.username,
+                                    'text', c.content,
+                                    'created_at', c.created_at
+                                )
+                                ORDER BY c.created_at DESC
+                            )
+                            FROM comments c
+                            JOIN users cu ON c.user_id = cu.id
+                            WHERE c.task_id = tasks.id
+                        ),
+                        '[]'::json
+                    )
+                END AS comments
              FROM tasks
              JOIN users ON tasks.user_id = users.id
              WHERE tasks.user_id = $1 OR tasks.is_private = false
@@ -29,14 +56,42 @@ const getAllTasks = async (req, res) => {
     }
 };
 
-//get task by id
+//get task by id (with comments if public)
 const getTaskById = async (req, res) => {
     try {
         const taskId = req.params.id;
         const userId = req.user.id;
 
         const result = await db.query(
-            `SELECT tasks.id, tasks.title, tasks.description, tasks.status, tasks.is_private, tasks.user_id, tasks.created_at, users.username
+            `SELECT
+                tasks.id,
+                tasks.title,
+                tasks.description,
+                tasks.status,
+                tasks.is_private,
+                tasks.user_id,
+                tasks.created_at,
+                users.username,
+                CASE
+                    WHEN tasks.is_private = true THEN '[]'::json
+                    ELSE COALESCE(
+                        (
+                            SELECT json_agg(
+                                json_build_object(
+                                    'id', c.id,
+                                    'username', cu.username,
+                                    'text', c.content,
+                                    'created_at', c.created_at
+                                )
+                                ORDER BY c.created_at DESC
+                            )
+                            FROM comments c
+                            JOIN users cu ON c.user_id = cu.id
+                            WHERE c.task_id = tasks.id
+                        ),
+                        '[]'::json
+                    )
+                END AS comments
              FROM tasks
              JOIN users ON tasks.user_id = users.id
              WHERE tasks.id = $1`,
@@ -70,8 +125,10 @@ const getTaskById = async (req, res) => {
                 description: task.description,
                 status: task.status,
                 is_private: task.is_private,
+                user_id: task.user_id,
                 created_at: task.created_at,
-                username: task.username
+                username: task.username,
+                comments: task.comments
             }
         });
     } catch (error) {
