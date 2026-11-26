@@ -1,49 +1,55 @@
-const db = require("../config/db-connection");
+const { eq, or, desc, sql } = require("drizzle-orm");
+const db = require("../db");
+const { tasks, users } = require("../db/schema");
 
-//getalltasks (own tasks + other users' public tasks with comments)
+// Public tasks walata comments tika ganna reusable subquery eka
+const commentsSubquery = sql`
+    CASE
+        WHEN ${tasks.is_private} = true THEN '[]'::json
+        ELSE COALESCE(
+            (
+                SELECT json_agg(
+                    json_build_object(
+                        'id', c.id,
+                        'username', cu.username,
+                        'text', c.content,
+                        'created_at', c.created_at
+                    )
+                    ORDER BY c.created_at DESC
+                )
+                FROM comments c
+                JOIN users cu ON c.user_id = cu.id
+                WHERE c.task_id = ${tasks.id}
+            ),
+            '[]'::json
+        )
+    END
+`;
+
+// getalltasks (own tasks + other users' public tasks with comments)
 const getAllTasks = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        const result = await db.query(
-            `SELECT
-                tasks.id,
-                tasks.title,
-                tasks.description,
-                tasks.status,
-                tasks.is_private,
-                tasks.user_id,
-                tasks.created_at,
-                users.username,
-                CASE
-                    WHEN tasks.is_private = true THEN '[]'::json
-                    ELSE COALESCE(
-                        (
-                            SELECT json_agg(
-                                json_build_object(
-                                    'id', c.id,
-                                    'username', cu.username,
-                                    'text', c.content,
-                                    'created_at', c.created_at
-                                )
-                                ORDER BY c.created_at DESC
-                            )
-                            FROM comments c
-                            JOIN users cu ON c.user_id = cu.id
-                            WHERE c.task_id = tasks.id
-                        ),
-                        '[]'::json
-                    )
-                END AS comments
-             FROM tasks
-             JOIN users ON tasks.user_id = users.id
-             WHERE tasks.user_id = $1 OR tasks.is_private = false
-             ORDER BY tasks.created_at DESC`,
-            [userId]
-        );
+        const allTasks = await db
+            .select({
+                id: tasks.id,
+                title: tasks.title,
+                description: tasks.description,
+                status: tasks.status,
+                is_private: tasks.is_private,
+                user_id: tasks.user_id,
+                created_at: tasks.created_at,
+                username: users.username,
+                comments: commentsSubquery
+            })
+            .from(tasks)
+            .innerJoin(users, eq(tasks.user_id, users.id))
+            .where(or(eq(tasks.user_id, userId), eq(tasks.is_private, false)))
+            .orderBy(desc(tasks.created_at));
 
         res.status(200).json({
-            tasks: result.rows
+            tasks: allTasks
         });
     } catch (error) {
         console.error(error);
@@ -56,49 +62,29 @@ const getAllTasks = async (req, res) => {
     }
 };
 
-//get task by id (with comments if public)
+// get task by id (with comments if public)
 const getTaskById = async (req, res) => {
     try {
-        const taskId = req.params.id;
+        const taskId = Number(req.params.id);
         const userId = req.user.id;
 
-        const result = await db.query(
-            `SELECT
-                tasks.id,
-                tasks.title,
-                tasks.description,
-                tasks.status,
-                tasks.is_private,
-                tasks.user_id,
-                tasks.created_at,
-                users.username,
-                CASE
-                    WHEN tasks.is_private = true THEN '[]'::json
-                    ELSE COALESCE(
-                        (
-                            SELECT json_agg(
-                                json_build_object(
-                                    'id', c.id,
-                                    'username', cu.username,
-                                    'text', c.content,
-                                    'created_at', c.created_at
-                                )
-                                ORDER BY c.created_at DESC
-                            )
-                            FROM comments c
-                            JOIN users cu ON c.user_id = cu.id
-                            WHERE c.task_id = tasks.id
-                        ),
-                        '[]'::json
-                    )
-                END AS comments
-             FROM tasks
-             JOIN users ON tasks.user_id = users.id
-             WHERE tasks.id = $1`,
-            [taskId]
-        );
+        const [task] = await db
+            .select({
+                id: tasks.id,
+                title: tasks.title,
+                description: tasks.description,
+                status: tasks.status,
+                is_private: tasks.is_private,
+                user_id: tasks.user_id,
+                created_at: tasks.created_at,
+                username: users.username,
+                comments: commentsSubquery
+            })
+            .from(tasks)
+            .innerJoin(users, eq(tasks.user_id, users.id))
+            .where(eq(tasks.id, taskId));
 
-        if (result.rows.length === 0) {
+        if (!task) {
             return res.status(404).json({
                 error: {
                     code: "NOT_FOUND",
@@ -106,8 +92,6 @@ const getTaskById = async (req, res) => {
                 }
             });
         }
-
-        const task = result.rows[0];
 
         if (task.is_private === true && task.user_id !== userId) {
             return res.status(403).json({
@@ -118,19 +102,7 @@ const getTaskById = async (req, res) => {
             });
         }
 
-        res.status(200).json({
-            task: {
-                id: task.id,
-                title: task.title,
-                description: task.description,
-                status: task.status,
-                is_private: task.is_private,
-                user_id: task.user_id,
-                created_at: task.created_at,
-                username: task.username,
-                comments: task.comments
-            }
-        });
+        res.status(200).json({ task });
     } catch (error) {
         console.error(error);
         res.status(500).json({
@@ -142,7 +114,7 @@ const getTaskById = async (req, res) => {
     }
 };
 
-//post task
+// post task
 const createTask = async (req, res) => {
     try {
         const title = req.body.title?.trim();
@@ -161,14 +133,20 @@ const createTask = async (req, res) => {
             });
         }
 
-        const result = await db.query(
-            "INSERT INTO tasks (title, description, status, is_private, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-            [title, description, status, is_private, userId]
-        );
+        const [newTask] = await db
+            .insert(tasks)
+            .values({
+                title,
+                description,
+                status,
+                is_private,
+                user_id: userId
+            })
+            .returning({ id: tasks.id });
 
         res.status(201).json({
             message: "Task created successfully",
-            id: result.rows[0].id
+            id: newTask.id
         });
     } catch (error) {
         console.error(error);
@@ -181,16 +159,19 @@ const createTask = async (req, res) => {
     }
 };
 
-//patch task details
+// patch task details
 const updateTask = async (req, res) => {
     try {
-        const id = req.params.id;
+        const id = Number(req.params.id);
         const userId = req.user.id;
         const updateData = req.body;
 
-        const existingTask = await db.query("SELECT * FROM tasks WHERE id = $1", [id]);
+        const [currentTask] = await db
+            .select()
+            .from(tasks)
+            .where(eq(tasks.id, id));
 
-        if (existingTask.rows.length === 0) {
+        if (!currentTask) {
             return res.status(404).json({
                 error: {
                     code: "NOT_FOUND",
@@ -198,8 +179,6 @@ const updateTask = async (req, res) => {
                 }
             });
         }
-
-        const currentTask = existingTask.rows[0];
 
         if (currentTask.user_id !== userId) {
             return res.status(403).json({
@@ -217,10 +196,10 @@ const updateTask = async (req, res) => {
             is_private: updateData.is_private ?? currentTask.is_private
         };
 
-        await db.query(
-            "UPDATE tasks SET title = $1, description = $2, status = $3, is_private = $4 WHERE id = $5",
-            [updatedTask.title, updatedTask.description, updatedTask.status, updatedTask.is_private, id]
-        );
+        await db
+            .update(tasks)
+            .set(updatedTask)
+            .where(eq(tasks.id, id));
 
         res.status(200).json({ message: "Task updated successfully" });
     } catch (error) {
@@ -234,18 +213,21 @@ const updateTask = async (req, res) => {
     }
 };
 
-//delete task
+// delete task
 const deleteTask = async (req, res) => {
     try {
-        const id = req.params.id;
+        const id = Number(req.params.id);
         const userId = req.user.id;
 
-        const existingTask = await db.query(
-            "SELECT id, user_id FROM tasks WHERE id = $1",
-            [id]
-        );
+        const [existingTask] = await db
+            .select({
+                id: tasks.id,
+                user_id: tasks.user_id
+            })
+            .from(tasks)
+            .where(eq(tasks.id, id));
 
-        if (existingTask.rows.length === 0) {
+        if (!existingTask) {
             return res.status(404).json({
                 error: {
                     code: "NOT_FOUND",
@@ -254,7 +236,7 @@ const deleteTask = async (req, res) => {
             });
         }
 
-        if (existingTask.rows[0].user_id !== userId) {
+        if (existingTask.user_id !== userId) {
             return res.status(403).json({
                 error: {
                     code: "FORBIDDEN",
@@ -263,7 +245,9 @@ const deleteTask = async (req, res) => {
             });
         }
 
-        await db.query("DELETE FROM tasks WHERE id = $1", [id]);
+        await db
+            .delete(tasks)
+            .where(eq(tasks.id, id));
 
         res.status(200).json({ message: "Task deleted successfully" });
     } catch (error) {

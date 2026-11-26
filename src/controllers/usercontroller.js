@@ -1,69 +1,72 @@
-const db = require("../config/db-connection");
+const { eq } = require("drizzle-orm");
+const db = require("../db");
+const { users } = require("../db/schema");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-//signup
-const registerUser = async (req ,  res) => {
+// signup
+const registerUser = async (req, res) => {
+    try {
+        const { username, password } = req.body;
 
-    try{
-        const { username, password} = req.body;
-
-        if(!username || !password){
+        if (!username || !password) {
             return res.status(400).json({ message: "Username and password are required" });
         }
 
-        const existingUserName = await db.query(
-            "SELECT * FROM users WHERE username = $1",[username]);
-        
-        if(existingUserName.rows.length>0){
+        const [existingUser] = await db
+            .select()
+            .from(users)
+            .where(eq(users.username, username));
+
+        if (existingUser) {
             return res.status(400).json({ message: "Username already exists" });
         }
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        const newUser = await db.query(
-            "INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id, username, created_at",
-            [username, hashedPassword]
-        );
+        const [newUser] = await db
+            .insert(users)
+            .values({
+                username,
+                password: hashedPassword
+            })
+            .returning({
+                id: users.id,
+                username: users.username,
+                created_at: users.created_at
+            });
 
         res.status(201).json({
             message: "User registered successfully",
-            user: newUser.rows[0]
+            user: newUser
         });
-
-    }
-
-    catch(error){
+    } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Server error" });
     }
 };
 
-
-//user loging
-const loginUser =  async (req  , res) => {
-
-    try{
-
+// user login
+const loginUser = async (req, res) => {
+    try {
         const { username, password } = req.body;
 
-        const result = await db.query(
-            "SELECT * FROM users WHERE username = $1",
-            [username]);
-            
-            if (result.rows.length === 0) {
+        const [user] = await db
+            .select()
+            .from(users)
+            .where(eq(users.username, username));
+
+        if (!user) {
             return res.status(401).json({ message: "Invalid username or password" });
         }
-
-        const user = result.rows[0];
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(401).json({ message: "Invalid username or password" });
         }
 
-//jwt token
+        // jwt token
         const token = jwt.sign(
             { id: user.id, username: user.username },
             process.env.JWT_SECRET,
@@ -78,23 +81,25 @@ const loginUser =  async (req  , res) => {
                 username: user.username
             }
         });
-
-    }
-
-    catch(error){
+    } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Server error" });
     }
 };
 
+// get current user
 const getCurrentUser = async (req, res) => {
     try {
-        const result = await db.query(
-            "SELECT id, username, created_at FROM users WHERE id = $1",
-            [req.user.id]
-        );
+        const [user] = await db
+            .select({
+                id: users.id,
+                username: users.username,
+                created_at: users.created_at
+            })
+            .from(users)
+            .where(eq(users.id, req.user.id));
 
-        if (result.rows.length === 0) {
+        if (!user) {
             return res.status(404).json({
                 error: {
                     code: "NOT_FOUND",
@@ -103,8 +108,7 @@ const getCurrentUser = async (req, res) => {
             });
         }
 
-        res.status(200).json(result.rows[0]);
-        
+        res.status(200).json(user);
     } catch (error) {
         console.error(error);
         res.status(500).json({
@@ -120,5 +124,4 @@ module.exports = {
     registerUser,
     loginUser,
     getCurrentUser
-
 };

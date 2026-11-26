@@ -21,5 +21,5 @@ main.use("/api/tasks",commentRoutes);
 
 
 main.listen(PORT, () => {
-    console.log('Server is running on ${PORT}!');
+    console.log(`Server is running on ${PORT}!`);
 });

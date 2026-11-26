@@ -1,8 +1,10 @@
-const db = require("../config/db-connection");
+const { eq } = require("drizzle-orm");
+const db = require("../db");
+const { tasks, comments, users } = require("../db/schema");
 
 const addComment = async (req, res) => {
     try {
-        const taskId = req.params.id;
+        const taskId = Number(req.params.id);
         const userId = req.user.id;
         const text = req.body.text?.trim();
 
@@ -16,12 +18,17 @@ const addComment = async (req, res) => {
             });
         }
 
-        const taskResult = await db.query(
-            "SELECT id, user_id, is_private FROM tasks WHERE id = $1",
-            [taskId]
-        );
+        // 1. Task eka thiyenawada balanna
+        const [task] = await db
+            .select({
+                id: tasks.id,
+                user_id: tasks.user_id,
+                is_private: tasks.is_private
+            })
+            .from(tasks)
+            .where(eq(tasks.id, taskId));
 
-        if (taskResult.rows.length === 0) {
+        if (!task) {
             return res.status(404).json({
                 error: {
                     code: "NOT_FOUND",
@@ -29,8 +36,6 @@ const addComment = async (req, res) => {
                 }
             });
         }
-
-        const task = taskResult.rows[0];
 
         if (task.is_private === true) {
             return res.status(403).json({
@@ -50,22 +55,30 @@ const addComment = async (req, res) => {
             });
         }
 
-        const insertResult = await db.query(
-            "INSERT INTO comments (task_id, user_id, content) VALUES ($1, $2, $3) RETURNING id, content, created_at",
-            [taskId, userId, text]
-        );
+        // 2. Comment eka insert karanna
+        const [newComment] = await db
+            .insert(comments)
+            .values({
+                task_id: taskId,
+                user_id: userId,
+                content: text
+            })
+            .returning({
+                id: comments.id,
+                content: comments.content,
+                created_at: comments.created_at
+            });
 
-        const newComment = insertResult.rows[0];
-
-        const userResult = await db.query(
-            "SELECT username FROM users WHERE id = $1",
-            [userId]
-        );
+        // 3. Comment dapu user ge username eka ganna
+        const [user] = await db
+            .select({ username: users.username })
+            .from(users)
+            .where(eq(users.id, userId));
 
         res.status(201).json({
             comment: {
                 id: newComment.id,
-                username: userResult.rows[0].username,
+                username: user.username,
                 text: newComment.content,
                 created_at: newComment.created_at
             }
